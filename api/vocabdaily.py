@@ -6,27 +6,36 @@ from PIL import Image, ImageDraw, ImageFont
 import textwrap
 import io
 
+# --- CONFIGURATION ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-# --- 1. DIRECT FONT LOADER ---
+# --- 1. ROBUST FONT LOADER (Relative Path) ---
 def get_font(font_filename, size):
-    # This looks for fonts in the "fonts" folder in your project root
-    font_path = os.path.join(os.getcwd(), 'fonts', font_filename)
+    # This finds the directory of the CURRENT script (api/)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
     
+    # Go up one level to the project root, then into fonts
+    # resulting path: /var/task/fonts/your_font.ttf
+    font_path = os.path.join(current_dir, '..', 'fonts', font_filename)
+    
+    # Resolve '..' to get a clean absolute path
+    font_path = os.path.abspath(font_path)
+
     try:
         return ImageFont.truetype(font_path, size)
     except OSError:
-        # If the filename is wrong, it prints what it was looking for so you can fix it
         print(f"ERROR: Could not find font at: {font_path}")
         return ImageFont.load_default()
 
 # --- 2. FETCH DATA ---
 def fetch_source_data():
     try:
-        r = requests.get("https://vocabdaily.vercel.app/get", timeout=4)
+        # Reduced timeout for speed
+        r = requests.get("https://vocabdaily.vercel.app/get", timeout=5)
         r.raise_for_status()
         return r.json()['data']
-    except:
+    except Exception as e:
+        print(f"Fetch Error: {e}")
         return None
 
 # --- 3. ENRICH DATA ---
@@ -45,10 +54,11 @@ def get_groq_enrichment(source_data):
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3
         }
-        res = requests.post(url, headers=headers, json=payload, timeout=8)
+        res = requests.post(url, headers=headers, json=payload, timeout=10)
         content = res.json()['choices'][0]['message']['content']
         return json.loads(content.replace('```json', '').replace('```', '').strip())
-    except:
+    except Exception as e:
+        print(f"Groq Error: {e}")
         return {**source_data, "pos": "word", "examples": ["Enrichment failed"]}
 
 # --- 4. GENERATE IMAGE ---
@@ -58,19 +68,20 @@ def create_vocab_card_bytes(data):
     img = Image.new("RGB", (W, H), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
 
-    # --- UPDATE THESE NAMES TO MATCH YOUR UPLOADED FILES ---
-    # Example: If you uploaded "arial.ttf", change "Roboto-Bold.ttf" to "arial.ttf"
+    # --- UPDATE NAMES HERE TO MATCH YOUR REPO ---
+    # If your files are named "arial.ttf", change "Roboto-Bold.ttf" to "arial.ttf"
     title_font = get_font("Roboto-Bold.ttf", int(125 * SCALE)) 
     body_font  = get_font("Roboto-Regular.ttf", int(48 * SCALE))
     pos_font   = get_font("Roboto-Italic.ttf", int(57 * SCALE))
 
-    # Draw
+    # --- DRAWING ---
     margin_x = int(80 * SCALE)
     cursor_y = int(50 * SCALE)
     
     term = data.get('term', 'Error').capitalize()
     draw.text((margin_x, cursor_y), term, font=title_font, fill="black")
     
+    # Robust height calc
     try:
         bbox = draw.textbbox((0,0), term, font=title_font)
         title_h = bbox[3] - bbox[1]
