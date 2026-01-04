@@ -109,7 +109,7 @@ def get_groq_enrichment(source_data):
 # --- 4. GENERATE IMAGE ---
 def create_vocab_card_bytes(data, output_filename="vocab_card_modified.png"):
     # CONFIG: Vertical Layout
-    SCALE = 4
+    SCALE = 0.5
     Base_W, Base_H = 1200, 1400
     W, H = Base_W * SCALE, Base_H * SCALE
     
